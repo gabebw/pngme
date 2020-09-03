@@ -4,7 +4,7 @@ use std::fmt;
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
-struct ChunkType {
+pub struct ChunkType {
     bytes: [u8; 4],
 }
 
@@ -16,7 +16,7 @@ impl ChunkType {
         (65 <= b && b <= 90) || (97 <= b && b <= 122)
     }
 
-    fn bytes(&self) -> [u8; 4] {
+    pub fn bytes(&self) -> [u8; 4] {
         self.bytes
     }
 
