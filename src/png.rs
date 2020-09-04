@@ -1,32 +1,30 @@
 use crate::chunk::Chunk;
+use crate::chunk_type::ChunkType;
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 
-struct Png {
-    #[allow(dead_code)]
+pub struct Png {
     chunks: Vec<Chunk>,
 }
 
 impl Png {
     const STANDARD_HEADER: [u8; 8] = *b"\x89PNG\r\n\x1a\n";
 
-    fn from_chunks(chunks: Vec<Chunk>) -> Self {
+    pub fn from_chunks(chunks: Vec<Chunk>) -> Self {
         Png { chunks }
     }
 
-    #[allow(dead_code)]
-    fn append_chunk(&mut self, chunk: Chunk) {
+    pub fn append_chunk(&mut self, chunk: Chunk) {
         self.chunks.push(chunk);
     }
 
     /// Remove the first chunk with the given chunk_type (if any).
-    #[allow(dead_code)]
-    fn remove_chunk(&mut self, chunk_type: &str) -> crate::Result<Chunk> {
+    pub fn remove_chunk(&mut self, chunk_type: ChunkType) -> crate::Result<Chunk> {
         if let Some(pos) = self
             .chunks
             .iter()
-            .position(|c| c.chunk_type.display() == chunk_type)
+            .position(|c| c.chunk_type() == &chunk_type)
         {
             Ok(self.chunks.remove(pos))
         } else {
@@ -41,20 +39,15 @@ impl Png {
         &Self::STANDARD_HEADER
     }
 
-    #[allow(dead_code)]
-    fn chunks(&self) -> &[Chunk] {
+    pub fn chunks(&self) -> &[Chunk] {
         self.chunks.as_slice()
     }
 
-    #[allow(dead_code)]
-    fn chunk_by_type(&self, chunk_type: &str) -> Option<&Chunk> {
-        self.chunks
-            .iter()
-            .find(|c| c.chunk_type.display() == chunk_type)
+    pub fn chunk_by_type(&self, chunk_type: ChunkType) -> Option<&Chunk> {
+        self.chunks.iter().find(|c| c.chunk_type() == &chunk_type)
     }
 
-    #[allow(dead_code)]
-    fn as_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         let chunk_iterators: Vec<u8> = self.chunks.iter().map(|c| c.as_bytes()).flatten().collect();
         self.header()
             .iter()
@@ -133,6 +126,7 @@ mod tests {
     use crate::chunk::Chunk;
     use crate::chunk_type::ChunkType;
     use std::convert::TryFrom;
+    use std::str::FromStr;
 
     fn testing_chunks() -> Vec<Chunk> {
         let mut chunks = Vec::new();
@@ -150,8 +144,6 @@ mod tests {
     }
 
     fn chunk_from_strings(chunk_type: &str, data: &str) -> crate::Result<Chunk> {
-        use std::str::FromStr;
-
         let chunk_type = ChunkType::from_str(chunk_type)?;
         let data: Vec<u8> = data.bytes().collect();
 
@@ -234,7 +226,9 @@ mod tests {
     #[test]
     fn test_chunk_by_type() {
         let png = testing_png();
-        let chunk = png.chunk_by_type("FrSt").unwrap();
+        let chunk = png
+            .chunk_by_type(ChunkType::from_str(&"FrSt").unwrap())
+            .unwrap();
         assert_eq!(&chunk.chunk_type().to_string(), "FrSt");
         assert_eq!(&chunk.data_as_string().unwrap(), "I am the first chunk");
     }
@@ -243,7 +237,9 @@ mod tests {
     fn test_append_chunk() {
         let mut png = testing_png();
         png.append_chunk(chunk_from_strings("TeSt", "Message").unwrap());
-        let chunk = png.chunk_by_type("TeSt").unwrap();
+        let chunk = png
+            .chunk_by_type(ChunkType::from_str(&"TeSt").unwrap())
+            .unwrap();
         assert_eq!(&chunk.chunk_type().to_string(), "TeSt");
         assert_eq!(&chunk.data_as_string().unwrap(), "Message");
     }
@@ -252,8 +248,9 @@ mod tests {
     fn test_remove_chunk() {
         let mut png = testing_png();
         png.append_chunk(chunk_from_strings("TeSt", "Message").unwrap());
-        png.remove_chunk("TeSt").unwrap();
-        let chunk = png.chunk_by_type("TeSt");
+        png.remove_chunk(ChunkType::from_str("TeSt").unwrap())
+            .unwrap();
+        let chunk = png.chunk_by_type(ChunkType::from_str(&"TeSt").unwrap());
         assert!(chunk.is_none());
     }
 

@@ -6,8 +6,6 @@ use std::fmt::Display;
 
 const MAXIMUM_LENGTH: u32 = (1 << 31) - 1;
 
-// Allow dead code since some functions are only called in tests
-#[allow(dead_code)]
 /// Each chunk consists of four parts: length, chunk type, chunk data, and CRC.
 pub struct Chunk {
     /// A 4-byte unsigned integer giving the number of bytes in the chunk's data
@@ -23,7 +21,7 @@ pub struct Chunk {
     /// decoders must treat the codes as fixed binary values, not character strings.
     /// For example, it would not be correct to represent the type code IDAT by the
     /// EBCDIC equivalents of those letters.
-    pub chunk_type: ChunkType,
+    chunk_type: ChunkType,
 
     /// The data bytes appropriate to the chunk type, if any. This field can be of
     /// zero length.
@@ -36,8 +34,6 @@ pub struct Chunk {
     crc: u32,
 }
 
-// Allow dead code since some functions are only called in tests
-#[allow(dead_code)]
 impl Chunk {
     pub fn new(chunk_type: ChunkType, chunk_data: Vec<u8>) -> Self {
         let crc = crc::crc32::checksum_ieee(&[&chunk_type.bytes(), chunk_data.as_slice()].concat());
@@ -154,11 +150,10 @@ impl Display for Chunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "len: {}, type:  {}, data: {}",
-            self.length(),
+            "{}\t{}",
             self.chunk_type(),
             self.data_as_string()
-                .unwrap_or_else(|_| "[invalid data]".to_string())
+                .unwrap_or_else(|_| "[data]".to_string())
         )
     }
 }
