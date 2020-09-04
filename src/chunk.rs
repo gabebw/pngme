@@ -9,7 +9,7 @@ const MAXIMUM_LENGTH: u32 = (1 << 31) - 1;
 // Allow dead code since some functions are only called in tests
 #[allow(dead_code)]
 /// Each chunk consists of four parts: length, chunk type, chunk data, and CRC.
-struct Chunk {
+pub struct Chunk {
     /// A 4-byte unsigned integer giving the number of bytes in the chunk's data
     /// field. The length counts *only* the data field, *not* itself, the chunk
     /// type code, or the CRC. Zero is a valid length. Although encoders and
@@ -23,7 +23,7 @@ struct Chunk {
     /// decoders must treat the codes as fixed binary values, not character strings.
     /// For example, it would not be correct to represent the type code IDAT by the
     /// EBCDIC equivalents of those letters.
-    chunk_type: ChunkType,
+    pub chunk_type: ChunkType,
 
     /// The data bytes appropriate to the chunk type, if any. This field can be of
     /// zero length.
@@ -39,11 +39,21 @@ struct Chunk {
 // Allow dead code since some functions are only called in tests
 #[allow(dead_code)]
 impl Chunk {
-    fn length(&self) -> u32 {
+    pub fn new(chunk_type: ChunkType, chunk_data: Vec<u8>) -> Self {
+        let crc = crc::crc32::checksum_ieee(&[&chunk_type.bytes(), chunk_data.as_slice()].concat());
+        Chunk {
+            length: chunk_data.len() as u32,
+            chunk_type,
+            chunk_data,
+            crc,
+        }
+    }
+
+    pub fn length(&self) -> u32 {
         self.length
     }
 
-    fn chunk_type(&self) -> &ChunkType {
+    pub fn chunk_type(&self) -> &ChunkType {
         &self.chunk_type
     }
 
@@ -55,8 +65,25 @@ impl Chunk {
         self.crc
     }
 
-    fn data_as_string(&self) -> crate::Result<String> {
+    pub fn data_as_string(&self) -> crate::Result<String> {
         Ok(String::from_utf8(self.chunk_data.clone()).map_err(Box::new)?)
+    }
+
+    pub fn as_bytes(&self) -> Vec<u8> {
+        self.length()
+            .to_be_bytes()
+            .iter()
+            .chain(self.chunk_type().bytes().iter())
+            .chain(self.data().iter())
+            .chain(self.crc().to_be_bytes().iter())
+            .copied()
+            .collect::<Vec<u8>>()
+    }
+
+    /// The total length of every byte in this chunk.
+    pub fn total_length(&self) -> u32 {
+        // Add 4 bytes each for the length, type, and CRC
+        self.length() + 4 * 3
     }
 }
 

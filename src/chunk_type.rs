@@ -65,6 +65,10 @@ impl ChunkType {
     fn is_valid(&self) -> bool {
         self.is_reserved_bit_valid()
     }
+
+    pub fn display(&self) -> String {
+        format!("{}", self)
+    }
 }
 
 impl fmt::Display for ChunkType {
