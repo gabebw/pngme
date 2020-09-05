@@ -13,15 +13,10 @@ pub struct Chunk {
     /// field. The length counts *only* the data field, *not* itself, the chunk
     /// type code, or the CRC. Zero is a valid length. Although encoders and
     /// decoders should treat the length as unsigned, its value must not exceed
-    /// 2^31-1 bytes. (Note that 1 << 31 == 2^31.)
+    /// 2^31-1 bytes.
     length: u32,
 
-    /// A 4-byte chunk type code. For convenience in description and in examining PNG
-    /// files, type codes are restricted to consist of uppercase and lowercase ASCII
-    /// letters (A-Z and a-z, or 65-90 and 97-122 decimal). However, encoders and
-    /// decoders must treat the codes as fixed binary values, not character strings.
-    /// For example, it would not be correct to represent the type code IDAT by the
-    /// EBCDIC equivalents of those letters.
+    /// The chunk type.
     chunk_type: ChunkType,
 
     /// The data bytes appropriate to the chunk type, if any. This field can be of
@@ -36,6 +31,8 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    /// Build a chunk from a [ChunkType](../chunk_type/struct.ChunkType.html) and
+    /// chunk data.
     pub fn new(chunk_type: ChunkType, chunk_data: Vec<u8>) -> Self {
         let crc = crc::crc32::checksum_ieee(&[&chunk_type.bytes(), chunk_data.as_slice()].concat());
         Chunk {
@@ -46,26 +43,36 @@ impl Chunk {
         }
     }
 
+    /// The length field. Note that this is *not* the total number of bytes in the
+    /// Chunk; it is the length of the `chunk.data()`.
+    /// To get the total number of bytes in the chunk, call
+    /// `chunk.as_bytes().len()`.
     pub fn length(&self) -> u32 {
         self.length
     }
 
+    /// The chunk type.
     pub fn chunk_type(&self) -> &ChunkType {
         &self.chunk_type
     }
 
+    /// The chunk data.
     fn data(&self) -> &[u8] {
         &self.chunk_data
     }
 
+    /// The pre-calculated CRC (cyclic redundancy check).
     fn crc(&self) -> u32 {
         self.crc
     }
 
+    /// Attempt to represent the data a UTF-8 string. Returns `Err` if it could
+    /// not decode to a String.
     pub fn data_as_string(&self) -> crate::Result<String> {
         Ok(String::from_utf8(self.chunk_data.clone()).map_err(Box::new)?)
     }
 
+    /// Every byte in this chunk.
     pub fn as_bytes(&self) -> Vec<u8> {
         self.length()
             .to_be_bytes()
@@ -78,23 +85,24 @@ impl Chunk {
     }
 }
 
+/// Something went wrong while decoding a chunk.
 #[derive(Debug)]
-pub struct BadChunkError {
-    /// Why is it a bad chunk?
+pub struct ChunkDecodingError {
+    /// The reason that decoding went wrong.
     reason: String,
 }
-impl BadChunkError {
+impl ChunkDecodingError {
     fn boxed(reason: String) -> Box<Self> {
         Box::new(Self { reason })
     }
 }
 
-impl fmt::Display for BadChunkError {
+impl fmt::Display for ChunkDecodingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Bad chunk: {}", self.reason)
     }
 }
-impl Error for BadChunkError {}
+impl Error for ChunkDecodingError {}
 
 impl TryFrom<&[u8]> for Chunk {
     type Error = crate::Error;
@@ -106,7 +114,7 @@ impl TryFrom<&[u8]> for Chunk {
         reader.read_exact(&mut buf)?;
         let length = u32::from_be_bytes(buf);
         if length > MAXIMUM_LENGTH {
-            return Err(BadChunkError::boxed(format!(
+            return Err(ChunkDecodingError::boxed(format!(
                 "Length is too long ({} > 2^31 - 1)",
                 length
             )));
@@ -116,7 +124,7 @@ impl TryFrom<&[u8]> for Chunk {
         let mut chunk_data: Vec<u8> = vec![0; usize::try_from(length)?];
         reader.read_exact(&mut chunk_data)?;
         if chunk_data.len() != length.try_into()? {
-            return Err(BadChunkError::boxed(format!(
+            return Err(ChunkDecodingError::boxed(format!(
                 "Data (len {}) is the wrong length (expected {})",
                 chunk_data.len(),
                 length
@@ -127,7 +135,7 @@ impl TryFrom<&[u8]> for Chunk {
         let true_crc =
             crc::crc32::checksum_ieee(&[&chunk_type.bytes(), chunk_data.as_slice()].concat());
         if provided_crc != true_crc {
-            return Err(BadChunkError::boxed(format!(
+            return Err(ChunkDecodingError::boxed(format!(
                 "Bad CRC (received {}, expected {})",
                 provided_crc, true_crc
             )));

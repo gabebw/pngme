@@ -5,23 +5,30 @@ use std::error::Error;
 use std::fmt;
 use std::io::{BufReader, Read};
 
+/// A full and valid PNG.
 pub struct Png {
     chunks: Vec<Chunk>,
 }
 
 impl Png {
+    /// The standard PNG header: b"\x89 P N G \r \n \x1a \n".
     const STANDARD_HEADER: [u8; 8] = *b"\x89PNG\r\n\x1a\n";
 
+    /// Create a PNG from already-built [Chunk](../chunk/struct.Chunk.html)s.
     pub fn from_chunks(chunks: Vec<Chunk>) -> Self {
         Png { chunks }
     }
 
+    /// Add a [Chunk](../chunk/struct.Chunk.html) to this PNG.
     pub fn append_chunk(&mut self, chunk: Chunk) {
         self.chunks.push(chunk);
     }
 
-    /// Remove the first chunk with the given chunk_type (if any).
-    pub fn remove_chunk(&mut self, chunk_type: ChunkType) -> crate::Result<Chunk> {
+    /// Remove the first [Chunk](../chunk/struct.Chunk.html) with thechunk
+    /// given [ChunkType](../chunk_type/struct.ChunkType.html), if any.
+    /// If it found the chunk, returns `Ok(removed_chunk)`.
+    /// If it could not find the chunk, returns `Err`.
+    pub fn remove_chunk(&mut self, chunk_type: ChunkType) -> Result<Chunk, ChunkNotFoundError> {
         if let Some(pos) = self
             .chunks
             .iter()
@@ -29,25 +36,31 @@ impl Png {
         {
             Ok(self.chunks.remove(pos))
         } else {
-            Err(Box::new(ChunkNotFoundError {
+            Err(ChunkNotFoundError {
                 chunk_type: chunk_type.to_string(),
-            }))
+            })
         }
     }
 
+    /// The standard PNG header.
     #[allow(dead_code)]
     fn header(&self) -> &[u8; 8] {
         &Self::STANDARD_HEADER
     }
 
+    /// Every [Chunk](../chunk/struct.Chunk.html) in this PNG.
     pub fn chunks(&self) -> &[Chunk] {
         self.chunks.as_slice()
     }
 
+    /// Find the first [Chunk](../chunk/struct.Chunk.html) with the given
+    /// [ChunkType](../chunk_type/struct.ChunkType.html).
     pub fn chunk_by_type(&self, chunk_type: ChunkType) -> Option<&Chunk> {
         self.chunks.iter().find(|c| c.chunk_type() == &chunk_type)
     }
 
+    /// Every byte in this PNG, including the header and each
+    /// [Chunk](../chunk/struct.Chunk.html).
     pub fn as_bytes(&self) -> Vec<u8> {
         let chunk_iterators: Vec<u8> = self.chunks.iter().map(|c| c.as_bytes()).flatten().collect();
         self.header()
@@ -72,7 +85,7 @@ impl TryFrom<&[u8]> for Png {
         let mut header = [0u8; 8];
         reader.read_exact(&mut header)?;
         if header != Png::STANDARD_HEADER {
-            return Err(BadPngError::boxed(format!(
+            return Err(PngDecodeError::boxed(format!(
                 "Bad header (received {:?}, expected {:?})",
                 header,
                 Png::STANDARD_HEADER
@@ -107,22 +120,23 @@ impl TryFrom<&[u8]> for Png {
 }
 
 #[derive(Debug)]
-pub struct BadPngError {
-    /// Why is it a bad PNG?
+/// Something went wrong when decoding a PNG.
+pub struct PngDecodeError {
+    /// The reason why we couldn't decode the PNG.
     reason: String,
 }
-impl BadPngError {
+impl PngDecodeError {
     fn boxed(reason: String) -> Box<Self> {
         Box::new(Self { reason })
     }
 }
 
-impl fmt::Display for BadPngError {
+impl fmt::Display for PngDecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Bad PNG: {}", self.reason)
     }
 }
-impl Error for BadPngError {}
+impl Error for PngDecodeError {}
 
 #[derive(Debug)]
 pub struct ChunkNotFoundError {
