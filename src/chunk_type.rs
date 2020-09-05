@@ -75,15 +75,19 @@ impl fmt::Display for ChunkType {
         Ok(())
     }
 }
-
-/// Stores the first invalid byte in a chunk.
 #[derive(Debug)]
-pub struct BadChunkTypeError {
-    byte: u8,
+pub enum BadChunkTypeError {
+    /// We found a bad byte while decoding. The u8 is the first invalid byte found.
+    BadByte(u8),
+    /// The chunk type to be decoded was the wrong size. The usize is the received size.
+    BadLength(usize),
 }
 impl fmt::Display for BadChunkTypeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Bad byte: {byte} ({byte:b})", byte = self.byte)
+        match self {
+            Self::BadByte(byte) => write!(f, "Bad byte: {byte} ({byte:b})", byte = byte),
+            Self::BadLength(len) => write!(f, "Bad length: {} (expected 4)", len),
+        }
     }
 }
 impl Error for BadChunkTypeError {}
@@ -94,7 +98,7 @@ impl TryFrom<[u8; 4]> for ChunkType {
     fn try_from(bytes: [u8; 4]) -> Result<Self, Self::Error> {
         for byte in bytes.iter() {
             if !Self::is_valid_byte(*byte) {
-                return Err(Box::new(BadChunkTypeError { byte: *byte }));
+                return Err(Box::new(BadChunkTypeError::BadByte(*byte)));
             }
         }
         Ok(ChunkType { bytes })
@@ -104,13 +108,17 @@ impl TryFrom<[u8; 4]> for ChunkType {
 impl FromStr for ChunkType {
     type Err = crate::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 4 {
+            return Err(Box::new(BadChunkTypeError::BadLength(s.len())));
+        }
+
         let mut vec: [u8; 4] = [0; 4];
 
         for (index, byte) in s.as_bytes().iter().enumerate() {
             if Self::is_valid_byte(*byte) {
                 vec[index] = *byte;
             } else {
-                return Err(Box::new(BadChunkTypeError { byte: *byte }));
+                return Err(Box::new(BadChunkTypeError::BadByte(*byte)));
             }
         }
         Ok(ChunkType { bytes: vec })
