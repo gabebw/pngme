@@ -1,18 +1,18 @@
-mod args;
+#[doc(inline)]
 mod chunk;
+#[doc(inline)]
 mod chunk_type;
-mod commands;
+#[doc(inline)]
 mod png;
 
-use structopt::StructOpt;
+#[doc(inline)]
+pub use chunk::Chunk;
+#[doc(inline)]
+pub use chunk_type::ChunkType;
+#[doc(inline)]
+pub use png::Png;
 
 /// Holds any kind of error.
 pub type Error = Box<dyn std::error::Error>;
 /// Holds a `Result` of any kind of error.
 pub type Result<T> = std::result::Result<T, Error>;
-
-#[doc(hidden)]
-fn main() -> Result<()> {
-    let cli = args::Cli::from_args();
-    commands::run(cli.subcommand)
-}

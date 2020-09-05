@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{BufReader, Read};
 
-/// A full and valid PNG.
+/// A full and valid PNG composed of Chunks.
 pub struct Png {
     chunks: Vec<Chunk>,
 }
