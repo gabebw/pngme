@@ -3,6 +3,7 @@ use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Display;
+use std::io::{BufReader, Read};
 
 const MAXIMUM_LENGTH: u32 = (1 << 31) - 1;
 
@@ -75,12 +76,6 @@ impl Chunk {
             .copied()
             .collect::<Vec<u8>>()
     }
-
-    /// The total length of every byte in this chunk.
-    pub fn total_length(&self) -> u32 {
-        // Add 4 bytes each for the length, type, and CRC
-        self.length() + 4 * 3
-    }
 }
 
 #[derive(Debug)]
@@ -105,22 +100,21 @@ impl TryFrom<&[u8]> for Chunk {
     type Error = crate::Error;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        // Track where we are in the chunk
-        let mut position = 0;
-        let length: u32 = u32::from_be_bytes(bytes[position..position + 4].try_into()?);
-        position += 4;
+        let mut reader = BufReader::new(bytes);
+        // Store the various 4-byte values in a chunk
+        let mut buf: [u8; 4] = [0; 4];
+        reader.read_exact(&mut buf)?;
+        let length = u32::from_be_bytes(buf);
         if length > MAXIMUM_LENGTH {
             return Err(BadChunkError::boxed(format!(
                 "Length is too long ({} > 2^31 - 1)",
                 length
             )));
         }
-        let type_bytes: &[u8; 4] = &bytes[position..position + 4].try_into()?;
-        position += 4;
-        let chunk_type: ChunkType = ChunkType::try_from(*type_bytes)?;
-        let chunk_data: Vec<u8> =
-            bytes[position..position + usize::try_from(length)?].try_into()?;
-        position += usize::try_from(length)?;
+        reader.read_exact(&mut buf)?;
+        let chunk_type: ChunkType = ChunkType::try_from(buf)?;
+        let mut chunk_data: Vec<u8> = vec![0; usize::try_from(length)?];
+        reader.read_exact(&mut chunk_data)?;
         if chunk_data.len() != length.try_into()? {
             return Err(BadChunkError::boxed(format!(
                 "Data (len {}) is the wrong length (expected {})",
@@ -128,7 +122,8 @@ impl TryFrom<&[u8]> for Chunk {
                 length
             )));
         }
-        let provided_crc = u32::from_be_bytes(bytes[position..position + 4].try_into()?);
+        reader.read_exact(&mut buf)?;
+        let provided_crc = u32::from_be_bytes(buf);
         let true_crc =
             crc::crc32::checksum_ieee(&[&chunk_type.bytes(), chunk_data.as_slice()].concat());
         if provided_crc != true_crc {

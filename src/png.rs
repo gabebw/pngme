@@ -3,6 +3,7 @@ use crate::chunk_type::ChunkType;
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
+use std::io::{BufReader, Read};
 
 pub struct Png {
     chunks: Vec<Chunk>,
@@ -67,7 +68,9 @@ impl fmt::Display for Png {
 impl TryFrom<&[u8]> for Png {
     type Error = crate::Error;
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let header = &bytes[0..8];
+        let mut reader = BufReader::new(bytes);
+        let mut header = [0u8; 8];
+        reader.read_exact(&mut header)?;
         if header != Png::STANDARD_HEADER {
             return Err(BadPngError::boxed(format!(
                 "Bad header (received {:?}, expected {:?})",
@@ -75,16 +78,28 @@ impl TryFrom<&[u8]> for Png {
                 Png::STANDARD_HEADER
             )));
         }
-        let mut position = 8;
-        // We don't know how big each chunk is (though the maximum is 4 bytes
-        // length + 2^31-1 bytes data + 4 bytes type + 4 bytes CRC).
-        // Since we don't know how big each one is, we feed all of the bytes to
-        // `Chunk::try_from`, then advance the position by however big that
-        // chunk was.
+        // Continually read the 4 bytes for length, then try to build a chunk.
+        // Every other field is 4 bytes, so once we read the length, we can
+        // infer everything else.
         let mut chunks = Vec::new();
-        while position < bytes.len() {
-            let chunk = Chunk::try_from(&bytes[position..])?;
-            position += usize::try_from(chunk.total_length())?;
+        let mut length_buffer = [0u8; 4];
+        while let Ok(()) = reader.read_exact(&mut length_buffer) {
+            // The final position is where a valid chunk ends, counting from the
+            // current position of the reader. We determine its size like so:
+            //   4 bytes of length (already read, so not reading again)
+            //   -----------------------
+            //   4 bytes of chunk type
+            // + `length` bytes of data
+            // + 4 bytes of CRC
+            let final_position = 4 + u32::from_be_bytes(length_buffer) + 4;
+            let mut buffer = vec![0; usize::try_from(final_position)?];
+            reader.read_exact(&mut buffer)?;
+            let all_bytes: Vec<u8> = length_buffer
+                .iter()
+                .copied()
+                .chain(buffer.into_iter())
+                .collect();
+            let chunk = Chunk::try_from(all_bytes.as_slice())?;
             chunks.push(chunk);
         }
         Ok(Png::from_chunks(chunks))
