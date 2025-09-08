@@ -3,7 +3,7 @@
 Hide secret messages inside your PNGs.
 
 This project is from [this excellent
-guide](https://picklenerd.github.io/pngme_book/).
+guide](https://jrdngr.github.io/pngme_book/).
 
 ## Install
 
